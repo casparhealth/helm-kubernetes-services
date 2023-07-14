@@ -23,12 +23,20 @@ func TestK8SServiceDeploymentCheckSecretStoreCSIBlock(t *testing.T) {
 	deployment := renderK8SServiceDeploymentWithSetValues(
 		t,
 		map[string]string{
-			"secrets.dbsettings.as":           "volume",
+			"serviceAccount.name":	           "secret-sa",
+			"secrets.dbsettings.as":           "csi",
 			"secrets.dbsettings.mountPath":    "/etc/db",
 			"secrets.dbsettings.csi.driver":   "secrets-store.csi.k8s.io",
 			"secrets.dbsettings.csi.readOnly": "true",
 
-			"secrets.dbsettings.csi.volumeAttributes.secretProviderClass": "backend-deployment-aws-secrets",
+			"secrets.dbsettings.csi.volumeAttributes.secretProviderClass": "secret-provider-class",
+
+			"secrets.dbsettings.items[0].name": "ENV_1",
+			"secrets.dbsettings.items[0].valueFrom.secretKeyRef.name": "dbsettings",
+			"secrets.dbsettings.items[0].valueFrom.secretKeyRef.key": "ENV_1",
+			"secrets.dbsettings.items[1].name": "ENV_2",
+			"secrets.dbsettings.items[1].valueFrom.secretKeyRef.name": "dbsettings",
+			"secrets.dbsettings.items[1].valueFrom.secretKeyRef.key": "ENV_2",
 		},
 	)
 
@@ -42,8 +50,7 @@ func TestK8SServiceDeploymentCheckSecretStoreCSIBlock(t *testing.T) {
 
 	// Check that the pod volume is a secret volume
 	assert.Equal(t, podVolume.Name, "dbsettings-volume")
-	require.NotNil(t, podVolume.Secret)
-	assert.Equal(t, podVolume.Secret.SecretName, "dbsettings")
+
 
 	// Check that the pod volume has CSI block
 	require.NotNil(t, podVolume.CSI)
@@ -51,7 +58,7 @@ func TestK8SServiceDeploymentCheckSecretStoreCSIBlock(t *testing.T) {
 	assert.Equal(t, podVolume.CSI.Driver, "secrets-store.csi.k8s.io")
 	assert.NotNil(t, podVolume.CSI.VolumeAttributes)
 	assert.Equal(t, podVolume.CSI.VolumeAttributes, map[string]string{
-		"secretProviderClass": "backend-deployment-aws-secrets",
+		"secretProviderClass": "secret-provider-class",
 	})
 
 }

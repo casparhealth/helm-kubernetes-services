@@ -21,7 +21,7 @@ We need this because certain sections are omitted if there are no volumes or env
 */ -}}
 
 {{/* Go Templates do not support variable updating, so we simulate it using dictionaries */}}
-{{- $hasInjectionTypes := dict "hasVolume" false "hasEnvVars" false "exposePorts" false -}}
+{{- $hasInjectionTypes := dict "hasVolume" false "hasEnvVars" false "hasSecretStoreVars" false  "exposePorts" false -}}
 {{- if .Values.envVars -}}
   {{- $_ := set $hasInjectionTypes "hasEnvVars" true -}}
 {{- end -}}
@@ -43,6 +43,9 @@ We need this because certain sections are omitted if there are no volumes or env
     {{- $_ := set $hasInjectionTypes "hasVolume" true -}}
   {{- else if eq (index . "as") "environment" -}}
     {{- $_ := set $hasInjectionTypes "hasEnvVars" true -}}
+  {{- else if eq (index . "as") "csi" -}}
+    {{- $_ := set $hasInjectionTypes "hasEnvVars" true -}}    
+    {{- $_ := set $hasInjectionTypes "hasVolume" true -}}
   {{- else if eq (index . "as") "envFrom" }}
     {{- $_ := set $hasInjectionTypes "hasEnvFrom" true -}}
   {{- else if eq (index . "as") "none" -}}
@@ -290,6 +293,15 @@ spec:
                   key: {{ $secretKey }}
             {{- end }}
             {{- end }}
+            {{- if eq $value.as "csi" }}
+            {{- range $secretName, $keyEnvVarConfig := $value.items }}
+            - name: {{ required "envVarName is required on secrets items when using environment" $keyEnvVarConfig.name | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $name }}
+                  key: {{ $keyEnvVarConfig.name }}
+            {{- end }}
+            {{- end }}
           {{- end }}
           {{- if index $hasInjectionTypes "hasEnvFrom" }}
           envFrom:
@@ -323,7 +335,7 @@ spec:
             {{- end }}
           {{- end }}
           {{- range $name, $value := .Values.secrets }}
-            {{- if eq $value.as "volume" }}
+            {{- if ne $value.as "environemnt" }}
             - name: {{ $name }}-volume
               mountPath: {{ quote $value.mountPath }}
               {{- if $value.subPath }}
@@ -392,12 +404,13 @@ spec:
                 mode: {{ include "k8s-service.fileModeOctalToDecimal" $keyMountConfig.fileMode }}
                 {{- end }}
               {{- end }}
-            {{- end }}
+            {{- end }}        
       {{- end }}
     {{- end }}
     {{- range $name, $value := .Values.secrets }}
       {{- if eq $value.as "volume" }}
         - name: {{ $name }}-volume
+         
           secret:
             secretName: {{ $name }}
             {{- if $value.items }}
@@ -411,6 +424,15 @@ spec:
               {{- end }}
             {{- end }}
       {{- end }}
+      {{- if eq $value.as "csi" }}
+        - name: {{ $name }}-volume          
+          csi: 
+            readOnly: {{ $value.csi.readOnly }}
+            driver:  {{ $value.csi.driver }}
+            volumeAttributes:
+              secretProviderClass: {{ $value.csi.volumeAttributes.secretProviderClass }}
+          
+      {{- end }}    
     {{- end }}
     {{- range $name, $value := .Values.persistentVolumes }}
         - name: {{ $name }}
